@@ -12,6 +12,10 @@ on:
         required: false
         default: 'false'
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   scrape-data:
     runs-on: ubuntu-latest
@@ -19,6 +23,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Set up Python 3.10
       uses: actions/setup-python@v4
@@ -41,8 +47,11 @@ jobs:
         if [ -f "schedule.db.zst" ]; then
           echo "📦 DB 압축 해제..."
           zstd -d schedule.db.zst -o schedule.db --force
+        else
+          echo "DB 파일 없음 - 새로 생성됨"
+          touch schedule.db
         fi
-        ls -lh schedule.db || echo "DB 파일 없음 - 새로 생성됨"
+        ls -lh schedule.db
     
     - name: Create backup
       run: |
@@ -58,18 +67,31 @@ jobs:
         LABANGBA_COOKIE: ${{ secrets.LABANGBA_COOKIE }}
       run: |
         if [ ! -z "$LABANGBA_COOKIE" ]; then
-          python cookie_updater.py || echo "쿠키 업데이트 스킵"
+          if [ -f "cookie_updater.py" ]; then
+            python cookie_updater.py || echo "쿠키 업데이트 스킵"
+          else
+            echo "cookie_updater.py 파일 없음"
+          fi
         fi
     
     - name: Run scraping
       run: |
         echo "🚀 크롤링 시작: $(date '+%Y-%m-%d %H:%M:%S')"
-        python scrape_schedule.py || echo "크롤링 실패 - 파일 확인 필요"
+        if [ -f "scrape_schedule.py" ]; then
+          python scrape_schedule.py || echo "크롤링 실패 - 로그 확인 필요"
+        else
+          echo "⚠️ scrape_schedule.py 파일이 없습니다!"
+          echo "크롤링을 건너뜁니다."
+        fi
     
     - name: Check data quality
       id: data_check
       run: |
-        python check_data.py || echo "데이터 체크 스킵"
+        if [ -f "check_data.py" ]; then
+          python check_data.py || echo "데이터 체크 실패"
+        else
+          echo "check_data.py 파일 없음"
+        fi
     
     - name: Update aggregate tables
       if: success()
@@ -85,6 +107,8 @@ jobs:
           zstd -19 schedule.db -o schedule.db.zst --force
           rm schedule.db
           ls -lh schedule.db.zst
+        else
+          echo "DB 파일 없음"
         fi
     
     - name: Generate status report
@@ -107,22 +131,24 @@ jobs:
         
         readme_content = f"""# 라방바 데이터 수집 시스템
         
-        ![상태](https://img.shields.io/badge/Status-{badge_text.replace(' ', '%20')}-{badge_color})
-        ![업데이트](https://img.shields.io/badge/Updated-{datetime.now().strftime('%Y-%m-%d').replace(' ', '%20')}-blue)
+![상태](https://img.shields.io/badge/Status-{badge_text.replace(' ', '%20')}-{badge_color})
+![업데이트](https://img.shields.io/badge/Updated-{datetime.now().strftime('%Y-%m-%d').replace(' ', '%20')}-blue)
         
-        ## 📊 최근 수집 결과
+## 📊 최근 수집 결과
         
-        - **날짜**: {status.get('date', 'N/A')}
-        - **총 레코드**: {status.get('total', 0):,}개
-        - **0원 매출**: {status.get('zero_count', 0)}개 ({status.get('zero_ratio', 0):.1f}%)
-        - **평균 매출**: {status.get('avg_revenue', 0):,.0f}원
+- **날짜**: {status.get('date', 'N/A')}
+- **총 레코드**: {status.get('total', 0):,}개
+- **0원 매출**: {status.get('zero_count', 0)}개 ({status.get('zero_ratio', 0):.1f}%)
+- **평균 매출**: {status.get('avg_revenue', 0):,.0f}원
         
-        ---
-        *자동 업데이트: 매일 23:56*
-        """
+---
+*자동 업데이트: 매일 23:56*
+"""
         
         with open('README.md', 'w', encoding='utf-8') as f:
             f.write(readme_content)
+        
+        print("README.md 생성 완료")
         SCRIPT_END
         
         python generate_report.py
@@ -136,12 +162,12 @@ jobs:
         
         MESSAGE="📊 Update: $(date +%Y-%m-%d)"
         if [ -f "data_check.json" ]; then
-          STATUS=$(python3 -c "import json; print(json.load(open('data_check.json'))['status'])" 2>/dev/null || echo "UNKNOWN")
-          TOTAL=$(python3 -c "import json; print(json.load(open('data_check.json'))['total'])" 2>/dev/null || echo "0")
+          STATUS=$(python3 -c "import json; print(json.load(open('data_check.json')).get('status', 'UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
+          TOTAL=$(python3 -c "import json; print(json.load(open('data_check.json')).get('total', 0))" 2>/dev/null || echo "0")
           MESSAGE="📊 Update: $(date +%Y-%m-%d) - $TOTAL records [$STATUS]"
         fi
         
         git diff --quiet && git diff --staged --quiet || {
           git commit -m "$MESSAGE"
-          git push
+          git push origin main
         }
