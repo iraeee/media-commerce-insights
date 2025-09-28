@@ -105,38 +105,11 @@ jobs:
     - name: Generate README
       if: always()
       run: |
-        python3 << 'EOF'
-import json
-import os
-from datetime import datetime
-
-status = {}
-if os.path.exists('data_check.json'):
-    with open('data_check.json', 'r') as f:
-        status = json.load(f)
-
-badge_color = 'success' if status.get('status') == 'OK' else 'critical'
-badge_text = status.get('message', 'Unknown')
-
-readme = f"""# 라방바 데이터 수집 시스템
-
-![상태](https://img.shields.io/badge/Status-{badge_text.replace(' ', '%20')}-{badge_color})
-![업데이트](https://img.shields.io/badge/Updated-{datetime.now().strftime('%Y-%m-%d')}-blue)
-
-## 📊 최근 수집 결과
-
-- **날짜**: {status.get('date', 'N/A')}
-- **총 레코드**: {status.get('total', 0):,}개
-- **0원 매출**: {status.get('zero_count', 0)}개 ({status.get('zero_ratio', 0):.1f}%)
-- **평균 매출**: {status.get('avg_revenue', 0):,.0f}원
-
----
-*자동 업데이트: 매일 23:56*
-"""
-
-with open('README.md', 'w', encoding='utf-8') as f:
-    f.write(readme)
-EOF
+        if [ -f "generate_readme.py" ]; then
+          python generate_readme.py
+        else
+          echo "generate_readme.py 없음 - README 업데이트 스킵"
+        fi
     
     - name: Commit and push
       run: |
@@ -162,35 +135,6 @@ EOF
       env:
         DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
       run: |
-        if [ ! -z "$DISCORD_WEBHOOK" ] && [ -f "data_check.json" ]; then
-          python3 << 'EOF'
-import json
-import requests
-import os
-
-with open('data_check.json', 'r') as f:
-    data = json.load(f)
-
-if data['status'] == 'OK':
-    color = 0x00FF00
-elif data['status'] in ['WARNING', 'CAUTION']:
-    color = 0xFFA500
-else:
-    color = 0xFF0000
-
-webhook_url = os.environ['DISCORD_WEBHOOK']
-
-embed = {
-    "title": f"라방바 크롤링 - {data['status']}",
-    "color": color,
-    "fields": [
-        {"name": "날짜", "value": data['date'], "inline": True},
-        {"name": "레코드", "value": f"{data['total']}개", "inline": True},
-        {"name": "0원 비율", "value": f"{data['zero_ratio']:.1f}%", "inline": True},
-        {"name": "메시지", "value": data['message'], "inline": False}
-    ]
-}
-
-requests.post(webhook_url, json={"embeds": [embed]})
-EOF
+        if [ ! -z "$DISCORD_WEBHOOK" ] && [ -f "send_discord.py" ]; then
+          python send_discord.py || echo "Discord 알림 실패"
         fi
