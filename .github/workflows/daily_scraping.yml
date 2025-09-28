@@ -2,8 +2,14 @@ name: Daily Labangba Scraping
 
 on:
   schedule:
-    # 23:56 KST = 14:56 UTC
-    - cron: '56 14 * * *'
+    # KST 기준 실행 시간 (UTC = KST - 9시간)
+    - cron: '0 22 * * *'   # 07:00 KST (22:00 UTC 전날)
+    - cron: '0 3 * * *'    # 12:00 KST (03:00 UTC)
+    - cron: '0 8 * * *'    # 17:00 KST (08:00 UTC)
+    - cron: '0 12 * * *'   # 21:00 KST (12:00 UTC)
+    - cron: '30 14 * * *'  # 23:30 KST (14:30 UTC)
+    - cron: '45 14 * * *'  # 23:45 KST (14:45 UTC)
+    - cron: '56 14 * * *'  # 23:56 KST (14:56 UTC)
     
   workflow_dispatch:
     inputs:
@@ -58,6 +64,7 @@ jobs:
           cp schedule.db "backups/schedule_$(date +%Y%m%d_%H%M).db"
           echo "💾 백업 생성 완료"
         fi
+        # 7일 이상 된 백업 삭제
         find backups -name "*.db" -mtime +7 -delete 2>/dev/null || true
     
     - name: Update cookie from secrets
@@ -70,11 +77,11 @@ jobs:
     
     - name: Run scraping
       run: |
-        echo "🚀 크롤링 시작: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "🚀 크롤링 시작: $(date '+%Y-%m-%d %H:%M:%S') KST"
         if [ -f "scrape_schedule.py" ]; then
           python scrape_schedule.py || echo "크롤링 실패 - 로그 확인"
         else
-          echo "⚠️ scrape_schedule.py 파일이 없습니다!"
+          echo ⚠️ scrape_schedule.py 파일이 없습니다!"
         fi
     
     - name: Check data quality
@@ -118,11 +125,12 @@ jobs:
         
         git add -A
         
-        MESSAGE="📊 Update: $(date +%Y-%m-%d)"
+        # 시간 포함된 커밋 메시지
+        MESSAGE="📊 Update: $(date +%Y-%m-%d' '%H:%M) KST"
         if [ -f "data_check.json" ]; then
           STATUS=$(python3 -c "import json; print(json.load(open('data_check.json')).get('status', 'UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
           TOTAL=$(python3 -c "import json; print(json.load(open('data_check.json')).get('total', 0))" 2>/dev/null || echo "0")
-          MESSAGE="📊 Update: $(date +%Y-%m-%d) - $TOTAL records [$STATUS]"
+          MESSAGE="📊 Update: $(date +%Y-%m-%d' '%H:%M) KST - $TOTAL records [$STATUS]"
         fi
         
         git diff --quiet && git diff --staged --quiet || {
@@ -130,11 +138,11 @@ jobs:
           git push origin main
         }
     
-    - name: Send Discord notification
+    - name: Send Slack notification
       if: always()
       env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
       run: |
-        if [ ! -z "$DISCORD_WEBHOOK" ] && [ -f "send_discord.py" ]; then
-          python send_discord.py || echo "Discord 알림 실패"
+        if [ ! -z "$SLACK_WEBHOOK" ] && [ -f "send_slack.py" ]; then
+          python send_slack.py || echo "Slack 알림 실패"
         fi
