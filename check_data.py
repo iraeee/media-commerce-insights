@@ -1,6 +1,7 @@
 """
 데이터 검증 및 쿠키 상태 체크
 기존 schedule.db 구조와 호환
+GitHub Actions 환경변수 업데이트
 """
 
 import sqlite3
@@ -11,25 +12,58 @@ from datetime import datetime
 def check_data_quality():
     """오늘 데이터 품질 체크"""
     
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
+    # DB 파일 확인
+    if not os.path.exists('schedule.db'):
+        print("⚠️ schedule.db 파일이 없습니다. 빈 DB 생성...")
+        conn = sqlite3.connect('schedule.db')
+        cursor = conn.cursor()
+        
+        # 테이블 생성
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS schedule (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            time TEXT,
+            broadcast TEXT,
+            platform TEXT,
+            category TEXT,
+            units_sold INTEGER,
+            revenue INTEGER,
+            product_count INTEGER,
+            cost INTEGER,
+            roi REAL,
+            is_major INTEGER
+        );
+        """)
+        conn.commit()
+    else:
+        conn = sqlite3.connect('schedule.db')
+        cursor = conn.cursor()
     
     today = datetime.now().strftime('%Y-%m-%d')
     
     # 오늘 데이터 확인
-    cursor.execute("""
-        SELECT 
-            COUNT(*) as total,
-            COUNT(CASE WHEN revenue = 0 OR revenue IS NULL THEN 1 END) as zero_count,
-            AVG(revenue) as avg_revenue,
-            MAX(revenue) as max_revenue,
-            MIN(revenue) as min_revenue
-        FROM schedule 
-        WHERE date = ?
-    """, (today,))
-    
-    result = cursor.fetchone()
-    total, zero_count, avg_revenue, max_revenue, min_revenue = result
+    try:
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as total,
+                COUNT(CASE WHEN revenue = 0 OR revenue IS NULL THEN 1 END) as zero_count,
+                AVG(revenue) as avg_revenue,
+                MAX(revenue) as max_revenue,
+                MIN(revenue) as min_revenue
+            FROM schedule 
+            WHERE date = ?
+        """, (today,))
+        
+        result = cursor.fetchone()
+        total, zero_count, avg_revenue, max_revenue, min_revenue = result
+    except Exception as e:
+        print(f"❌ DB 조회 실패: {e}")
+        total = 0
+        zero_count = 0
+        avg_revenue = 0
+        max_revenue = 0
+        min_revenue = 0
     
     conn.close()
     
@@ -75,12 +109,17 @@ def check_data_quality():
     
     # 콘솔 출력
     print(message)
+    print(f"총 레코드: {total}개")
+    print(f"0원 매출: {zero_count}개")
     
-    # GitHub Actions 출력
+    # GitHub Actions 환경변수 (새로운 방식)
     if os.environ.get('GITHUB_ACTIONS'):
-        print(f"::set-output name=status::{status}")
-        print(f"::set-output name=zero_ratio::{zero_count/total*100 if total > 0 else 0:.1f}")
-        print(f"::set-output name=total_records::{total}")
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        if github_output:
+            with open(github_output, 'a') as f:
+                f.write(f"status={status}\n")
+                f.write(f"zero_ratio={zero_count/total*100 if total > 0 else 0:.1f}\n")
+                f.write(f"total_records={total}\n")
     
     # 종료 코드 (CRITICAL이면 1)
     return 0 if status != "CRITICAL" else 1
