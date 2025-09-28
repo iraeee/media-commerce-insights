@@ -56,7 +56,7 @@ def fetch_schedule_json(
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-origin",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-        "Cookie": "_ga=GA1.1.1148900813.1753071738; _gcl_au=1.1.2127562858.1753071789.734155396.1753071810.1753071813; _fwb=8206MdvNQcDXiuEel5llWx.1753071736391; sales2=eyJoaXN0b3J5IjpbNTAwMDAwMDNdLCJsYWJhbmdfb2JqIjp7fSwicGFzdF9rZXl3b3JkMiI6Iu2DgO2IrOq3uOumrOuqqCIsInVzZXIiOnsidXNlcl9pZCI6IjlqOTE3YldXdHktQ29FSU9Qa2wzTiIsIm5pY2tuYW1lIjoiaXJhZSIsInNlc3NfaWQiOiI1bjl1MmNDMmxkZm9aYzN1cDVacUYiLCJ1c2VyX3R5cGUiOjAsInZvdWNoZXIiOjAsInByZWZlciI6MX19; sales2.sig=H_m259PdzJTw0F1uUNfLmzSg51s; _ga_VN7F3DELDK=GS2.1.s1756172082$o26$g1$t1756173157$j10$l0$h0; _ga_NLGYGNTN3F=GS2.1.s1756172082$o26$g1$t1756173157$j10$l0$h0"
+        "Cookie": "_fwb=1639ZQ7ec0HAGL0fvKKXUMr.1753104666840; _ga=GA1.1.1522864626.1753104668; wcs_bt=1fa6f0a9a30eb70:1754106013; sales2=eyJ1c2VyIjp7InVzZXJfaWQiOiI5ajkxN2JXV3R5LUNvRUlPUGtsM04iLCJuaWNrbmFtZSI6ImlyYWUiLCJzZXNzX2lkIjoiVlBmMEZuVEdWbjE0akRWNmQtWEFxIiwidXNlcl90eXBlIjowLCJ2b3VjaGVyIjowLCJwcmVmZXIiOjF9fQ==; sales2.sig=yn4msHWawRXSq4YlwJBgVp1PaaU; _ga_VN7F3DELDK=GS2.1.s1759059583$o40$g1$t1759060050$j60$l0$h0; _ga_NLGYGNTN3F=GS2.1.s1759059583$o38$g1$t1759060050$j60$l0$h0"
     }
     
     # POST 요청 데이터
