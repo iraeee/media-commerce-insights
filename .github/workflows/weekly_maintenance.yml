@@ -27,62 +27,71 @@ jobs:
     
     - name: Decompress DB
       run: |
-        zstd -d schedule.db.zst -o schedule.db --force
+        if [ -f "schedule.db.zst" ]; then
+          zstd -d schedule.db.zst -o schedule.db --force
+        fi
     
     - name: DB optimization
       run: |
-        # VACUUM 실행
-        sqlite3 schedule.db "VACUUM;"
-        
-        # 크기 확인
-        ls -lh schedule.db
+        if [ -f "schedule.db" ]; then
+          sqlite3 schedule.db "VACUUM;"
+          ls -lh schedule.db
+        fi
     
     - name: Create monthly backup
       run: |
-        mkdir -p monthly_backups
-        cp schedule.db "monthly_backups/schedule_$(date +%Y%m).db"
-        zstd -19 "monthly_backups/schedule_$(date +%Y%m).db"
-        rm "monthly_backups/schedule_$(date +%Y%m).db"
+        if [ -f "schedule.db" ]; then
+          mkdir -p monthly_backups
+          cp schedule.db "monthly_backups/schedule_$(date +%Y%m).db"
+          zstd -19 "monthly_backups/schedule_$(date +%Y%m).db"
+          rm "monthly_backups/schedule_$(date +%Y%m).db"
+        fi
     
     - name: Generate statistics
       run: |
-        python3 - <<EOF
+        cat > generate_stats.py << 'SCRIPT_END'
         import sqlite3
         import pandas as pd
         from datetime import datetime, timedelta
+        import os
         
-        conn = sqlite3.connect('schedule.db')
+        if os.path.exists('schedule.db'):
+            conn = sqlite3.connect('schedule.db')
+            
+            query = '''
+            SELECT 
+                substr(date, 1, 7) as month,
+                COUNT(*) as records,
+                COUNT(DISTINCT date) as days,
+                COUNT(DISTINCT platform) as platforms,
+                AVG(revenue) as avg_revenue,
+                SUM(revenue) as total_revenue
+            FROM schedule
+            WHERE date >= date('now', '-3 months')
+            GROUP BY month
+            ORDER BY month DESC
+            '''
+            
+            df = pd.read_sql_query(query, conn)
+            
+            print("📊 월별 통계")
+            print(df.to_string(index=False))
+            
+            df.to_csv('monthly_stats.csv', index=False)
+            
+            conn.close()
+        else:
+            print("DB 파일이 없습니다")
+        SCRIPT_END
         
-        # 월별 통계
-        query = '''
-        SELECT 
-            substr(date, 1, 7) as month,
-            COUNT(*) as records,
-            COUNT(DISTINCT date) as days,
-            COUNT(DISTINCT platform) as platforms,
-            AVG(revenue) as avg_revenue,
-            SUM(revenue) as total_revenue
-        FROM schedule
-        WHERE date >= date('now', '-3 months')
-        GROUP BY month
-        ORDER BY month DESC
-        '''
-        
-        df = pd.read_sql_query(query, conn)
-        
-        print("📊 월별 통계")
-        print(df.to_string(index=False))
-        
-        # CSV로 저장
-        df.to_csv('monthly_stats.csv', index=False)
-        
-        conn.close()
-        EOF
+        python generate_stats.py
     
     - name: Compress and commit
       run: |
-        zstd -19 schedule.db -o schedule.db.zst --force
-        rm schedule.db
+        if [ -f "schedule.db" ]; then
+          zstd -19 schedule.db -o schedule.db.zst --force
+          rm schedule.db
+        fi
         
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
