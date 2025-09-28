@@ -1,0 +1,14 @@
+# 라방바 데이터 수집 시스템 의존성
+
+# 필수 패키지
+requests>=2.31.0
+pandas>=2.0.0
+streamlit>=1.28.0
+plotly>=5.17.0
+
+# 압축 (선택)
+zstandard>=0.21.0
+
+# 대시보드 관련
+altair<5
+xlsxwriter>=3.1.0
