@@ -23,8 +23,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Set up Python 3.10
       uses: actions/setup-python@v4
@@ -48,10 +46,10 @@ jobs:
           echo "📦 DB 압축 해제..."
           zstd -d schedule.db.zst -o schedule.db --force
         else
-          echo "DB 파일 없음 - 새로 생성됨"
+          echo "DB 파일 없음 - 새로 생성"
           touch schedule.db
         fi
-        ls -lh schedule.db
+        ls -lh schedule.db || true
     
     - name: Create backup
       run: |
@@ -66,22 +64,17 @@ jobs:
       env:
         LABANGBA_COOKIE: ${{ secrets.LABANGBA_COOKIE }}
       run: |
-        if [ ! -z "$LABANGBA_COOKIE" ]; then
-          if [ -f "cookie_updater.py" ]; then
-            python cookie_updater.py || echo "쿠키 업데이트 스킵"
-          else
-            echo "cookie_updater.py 파일 없음"
-          fi
+        if [ ! -z "$LABANGBA_COOKIE" ] && [ -f "cookie_updater.py" ]; then
+          python cookie_updater.py || echo "쿠키 업데이트 스킵"
         fi
     
     - name: Run scraping
       run: |
         echo "🚀 크롤링 시작: $(date '+%Y-%m-%d %H:%M:%S')"
         if [ -f "scrape_schedule.py" ]; then
-          python scrape_schedule.py || echo "크롤링 실패 - 로그 확인 필요"
+          python scrape_schedule.py || echo "크롤링 실패 - 로그 확인"
         else
           echo "⚠️ scrape_schedule.py 파일이 없습니다!"
-          echo "크롤링을 건너뜁니다."
         fi
     
     - name: Check data quality
@@ -107,51 +100,43 @@ jobs:
           zstd -19 schedule.db -o schedule.db.zst --force
           rm schedule.db
           ls -lh schedule.db.zst
-        else
-          echo "DB 파일 없음"
         fi
     
-    - name: Generate status report
+    - name: Generate README
       if: always()
       run: |
-        cat > generate_report.py << 'SCRIPT_END'
-        import json
-        import os
-        from datetime import datetime
-        
-        # 체크 결과 로드
-        status = {}
-        if os.path.exists('data_check.json'):
-            with open('data_check.json', 'r') as f:
-                status = json.load(f)
-        
-        # README 생성
-        badge_color = 'success' if status.get('status') == 'OK' else 'critical'
-        badge_text = status.get('message', 'Unknown')
-        
-        readme_content = f"""# 라방바 데이터 수집 시스템
-        
+        python3 << 'EOF'
+import json
+import os
+from datetime import datetime
+
+status = {}
+if os.path.exists('data_check.json'):
+    with open('data_check.json', 'r') as f:
+        status = json.load(f)
+
+badge_color = 'success' if status.get('status') == 'OK' else 'critical'
+badge_text = status.get('message', 'Unknown')
+
+readme = f"""# 라방바 데이터 수집 시스템
+
 ![상태](https://img.shields.io/badge/Status-{badge_text.replace(' ', '%20')}-{badge_color})
-![업데이트](https://img.shields.io/badge/Updated-{datetime.now().strftime('%Y-%m-%d').replace(' ', '%20')}-blue)
-        
+![업데이트](https://img.shields.io/badge/Updated-{datetime.now().strftime('%Y-%m-%d')}-blue)
+
 ## 📊 최근 수집 결과
-        
+
 - **날짜**: {status.get('date', 'N/A')}
 - **총 레코드**: {status.get('total', 0):,}개
 - **0원 매출**: {status.get('zero_count', 0)}개 ({status.get('zero_ratio', 0):.1f}%)
 - **평균 매출**: {status.get('avg_revenue', 0):,.0f}원
-        
+
 ---
 *자동 업데이트: 매일 23:56*
 """
-        
-        with open('README.md', 'w', encoding='utf-8') as f:
-            f.write(readme_content)
-        
-        print("README.md 생성 완료")
-        SCRIPT_END
-        
-        python generate_report.py
+
+with open('README.md', 'w', encoding='utf-8') as f:
+    f.write(readme)
+EOF
     
     - name: Commit and push
       run: |
@@ -171,3 +156,41 @@ jobs:
           git commit -m "$MESSAGE"
           git push origin main
         }
+    
+    - name: Send Discord notification
+      if: always()
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      run: |
+        if [ ! -z "$DISCORD_WEBHOOK" ] && [ -f "data_check.json" ]; then
+          python3 << 'EOF'
+import json
+import requests
+import os
+
+with open('data_check.json', 'r') as f:
+    data = json.load(f)
+
+if data['status'] == 'OK':
+    color = 0x00FF00
+elif data['status'] in ['WARNING', 'CAUTION']:
+    color = 0xFFA500
+else:
+    color = 0xFF0000
+
+webhook_url = os.environ['DISCORD_WEBHOOK']
+
+embed = {
+    "title": f"라방바 크롤링 - {data['status']}",
+    "color": color,
+    "fields": [
+        {"name": "날짜", "value": data['date'], "inline": True},
+        {"name": "레코드", "value": f"{data['total']}개", "inline": True},
+        {"name": "0원 비율", "value": f"{data['zero_ratio']:.1f}%", "inline": True},
+        {"name": "메시지", "value": data['message'], "inline": False}
+    ]
+}
+
+requests.post(webhook_url, json={"embeds": [embed]})
+EOF
+        fi
