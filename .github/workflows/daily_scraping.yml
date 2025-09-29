@@ -3,10 +3,17 @@ name: Daily Labangba Scraping
 on:
   schedule:
     # KST 기준 실행 시간 (UTC = KST - 9시간)
+    # 오전/오후 2시간 간격
     - cron: '0 22 * * *'   # 07:00 KST
-    - cron: '0 3 * * *'    # 12:00 KST
+    - cron: '0 0 * * *'    # 09:00 KST
+    - cron: '0 2 * * *'    # 11:00 KST  
+    - cron: '0 4 * * *'    # 13:00 KST
+    - cron: '0 6 * * *'    # 15:00 KST
     - cron: '0 8 * * *'    # 17:00 KST
+    - cron: '0 10 * * *'   # 19:00 KST
     - cron: '0 12 * * *'   # 21:00 KST
+    # 23시 이후 집중 크롤링
+    - cron: '0 14 * * *'   # 23:00 KST
     - cron: '30 14 * * *'  # 23:30 KST
     - cron: '45 14 * * *'  # 23:45 KST
     - cron: '56 14 * * *'  # 23:56 KST
@@ -14,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       force_run:
-        description: '강제 실행'
+        description: '수동 실행'
         required: false
         default: 'false'
 
@@ -43,69 +50,50 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install requests pandas streamlit plotly
-        sudo apt-get update && sudo apt-get install -y zstd
-    
-    - name: Decompress database
-      run: |
-        if [ -f "schedule.db.zst" ]; then
-          echo "DB 압축 해제..."
-          zstd -d schedule.db.zst -o schedule.db --force
-        else
-          echo "DB 파일 없음 - 새로 생성"
-          touch schedule.db
-        fi
-        ls -lh schedule.db || true
-    
-    - name: Create backup
-      run: |
-        mkdir -p backups
-        if [ -f "schedule.db" ]; then
-          cp schedule.db "backups/schedule_$(date +%Y%m%d_%H%M).db"
-          echo "백업 생성 완료"
-        fi
-        find backups -name "*.db" -mtime +7 -delete 2>/dev/null || true
-    
-    - name: Update cookie from secrets
+        pip install requests pandas openpyxl streamlit plotly
+        
+    - name: Run health check
+      continue-on-error: true
       env:
         LABANGBA_COOKIE: ${{ secrets.LABANGBA_COOKIE }}
       run: |
-        if [ ! -z "$LABANGBA_COOKIE" ] && [ -f "cookie_updater.py" ]; then
-          python cookie_updater.py || echo "쿠키 업데이트 스킵"
+        if [ -f "health_check.py" ]; then
+          python health_check.py || echo "Health check warnings"
         fi
     
     - name: Run scraping
+      env:
+        LABANGBA_COOKIE: ${{ secrets.LABANGBA_COOKIE }}
       run: |
-        echo "크롤링 시작: $(date)"
+        echo "크롤링 시작: $(date +%Y-%m-%d' '%H:%M:%S)"
+        
+        # Cookie 업데이트
+        if [ -f "cookie_updater.py" ]; then
+          python cookie_updater.py
+        fi
+        
+        # 크롤링 실행
         if [ -f "scrape_schedule.py" ]; then
-          python scrape_schedule.py || echo "크롤링 실패 - 로그 확인"
+          python scrape_schedule.py
         else
-          echo "scrape_schedule.py 파일이 없습니다!"
+          echo "ERROR: scrape_schedule.py not found"
+          exit 1
         fi
     
     - name: Check data quality
       id: data_check
+      continue-on-error: true
       run: |
         if [ -f "check_data.py" ]; then
-          python check_data.py || echo "데이터 체크 실패"
-        else
-          echo "check_data.py 파일 없음"
+          python check_data.py
         fi
     
     - name: Update aggregate tables
       if: success()
+      continue-on-error: true
       run: |
         if [ -f "update_aggregate_tables.py" ]; then
-          python update_aggregate_tables.py || true
-        fi
-    
-    - name: Compress database
-      run: |
-        if [ -f "schedule.db" ]; then
-          echo "DB 압축..."
-          zstd -19 schedule.db -o schedule.db.zst --force
-          rm schedule.db
-          ls -lh schedule.db.zst
+          python update_aggregate_tables.py
         fi
     
     - name: Generate README
@@ -113,34 +101,25 @@ jobs:
       run: |
         if [ -f "generate_readme.py" ]; then
           python generate_readme.py
-        else
-          echo "generate_readme.py 없음 - README 업데이트 스킵"
         fi
     
     - name: Commit and push
+      if: always()
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
         git add -A
         
-        MESSAGE="Update: $(date +%Y-%m-%d_%H:%M)"
+        # 커밋 메시지 생성
+        MESSAGE="📊 Update: $(date +%Y-%m-%d' '%H:%M' KST')"
         if [ -f "data_check.json" ]; then
-          STATUS=$(python3 -c "import json; print(json.load(open('data_check.json')).get('status', 'UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
-          TOTAL=$(python3 -c "import json; print(json.load(open('data_check.json')).get('total', 0))" 2>/dev/null || echo "0")
-          MESSAGE="Update: $(date +%Y-%m-%d_%H:%M) - $TOTAL records [$STATUS]"
+          TOTAL=$(python3 -c "import json; print(json.load(open('data_check.json')).get('today', 0))" 2>/dev/null || echo "0")
+          SALES=$(python3 -c "import json; print(json.load(open('data_check.json')).get('with_sales', 0))" 2>/dev/null || echo "0")
+          MESSAGE="📊 Update: $(date +%Y-%m-%d' '%H:%M) - $TOTAL records, $SALES with sales"
         fi
         
         git diff --quiet && git diff --staged --quiet || {
           git commit -m "$MESSAGE"
           git push origin main
         }
-    
-    - name: Send Slack notification
-      if: always()
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-      run: |
-        if [ ! -z "$SLACK_WEBHOOK" ] && [ -f "send_slack.py" ]; then
-          python send_slack.py || echo "Slack 알림 실패"
-        fi
