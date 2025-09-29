@@ -1,0 +1,227 @@
+name: Test Labangba API Access
+
+on:
+  workflow_dispatch:  # 수동 실행
+  push:
+    paths:
+      - '.github/workflows/test_api.yml'
+
+jobs:
+  test-api-access:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install requests
+      run: pip install requests
+    
+    - name: Test 1 - Basic Connection
+      run: |
+        python -c "
+import requests
+import json
+
+print('='*60)
+print('TEST 1: Basic Connection Test')
+print('='*60)
+
+try:
+    # 메인 페이지 접근 테스트
+    response = requests.get('https://live.ecomm-data.com/schedule/hs', timeout=10)
+    print(f'Main page status: {response.status_code}')
+    
+    if response.status_code == 403:
+        print('❌ BLOCKED: GitHub Actions IP is blocked by Cloudflare')
+        print('Response headers:', dict(response.headers))
+        exit(1)
+    elif response.status_code == 200:
+        print('✅ Main page accessible')
+    else:
+        print(f'⚠️ Unexpected status: {response.status_code}')
+        
+except Exception as e:
+    print(f'❌ Connection failed: {e}')
+    exit(1)
+        "
+    
+    - name: Test 2 - API without Cookie
+      run: |
+        python -c "
+import requests
+import json
+from datetime import datetime
+
+print('='*60)
+print('TEST 2: API Access without Cookie')
+print('='*60)
+
+try:
+    date_str = datetime.now().strftime('%y%m%d')
+    
+    response = requests.post(
+        'https://live.ecomm-data.com/schedule/list_hs',
+        json={'date': date_str},
+        headers={
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0'
+        },
+        timeout=10
+    )
+    
+    print(f'API status: {response.status_code}')
+    
+    if response.status_code == 403:
+        print('❌ API blocked without cookie')
+    elif response.status_code == 200:
+        data = response.json()
+        if 'list' in data:
+            print(f'✅ Got {len(data[\"list\"])} items without cookie!')
+            # 매출 데이터 확인
+            with_sales = sum(1 for item in data['list'] if item.get('sales_amt') not in [None, 0])
+            print(f'   Items with sales: {with_sales}')
+        else:
+            print('⚠️ Unexpected response structure')
+    else:
+        print(f'Response: {response.text[:200]}')
+        
+except Exception as e:
+    print(f'Error: {e}')
+        "
+    
+    - name: Test 3 - With Cookie (if provided)
+      if: ${{ secrets.LABANGBA_COOKIE != '' }}
+      env:
+        COOKIE: ${{ secrets.LABANGBA_COOKIE }}
+      run: |
+        python -c "
+import requests
+import json
+import os
+from datetime import datetime
+
+print('='*60)
+print('TEST 3: API Access with Cookie')
+print('='*60)
+
+cookie = os.environ.get('COOKIE', '')
+if not cookie:
+    print('No cookie provided in secrets')
+    exit(0)
+
+# 세션 생성
+session = requests.Session()
+
+headers = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0',
+    'Origin': 'https://live.ecomm-data.com',
+    'Referer': 'https://live.ecomm-data.com/schedule/hs',
+    'Cookie': cookie
+}
+
+try:
+    # 1. 세션 초기화 (메인 페이지 방문)
+    print('Step 1: Initialize session...')
+    main_resp = session.get(
+        'https://live.ecomm-data.com/schedule/hs',
+        headers={'User-Agent': headers['User-Agent'], 'Cookie': cookie},
+        timeout=10
+    )
+    print(f'Main page: {main_resp.status_code}')
+    
+    # 2. API 호출
+    print('Step 2: Call API...')
+    date_str = datetime.now().strftime('%y%m%d')
+    
+    api_resp = session.post(
+        'https://live.ecomm-data.com/schedule/list_hs',
+        json={'date': date_str},
+        headers=headers,
+        timeout=10
+    )
+    
+    print(f'API status: {api_resp.status_code}')
+    
+    if api_resp.status_code == 200:
+        data = api_resp.json()
+        if 'list' in data:
+            items = data['list']
+            print(f'✅ Got {len(items)} items')
+            
+            # 매출 데이터 확인
+            with_sales = sum(1 for item in items if item.get('sales_amt') not in [None, 0])
+            print(f'   Items with sales data: {with_sales}/{len(items)}')
+            
+            if with_sales > 0:
+                print('   ✅ SUCCESS: Can get sales data from GitHub Actions!')
+                # 샘플 출력
+                for item in items[:3]:
+                    if item.get('sales_amt'):
+                        print(f'   Sample: {item[\"hsshow_title\"][:30]} = {item[\"sales_amt\"]:,}원')
+                        break
+            else:
+                print('   ⚠️ No sales data (all None or 0)')
+                print('   Possible reasons:')
+                print('   - Session initialization failed')
+                print('   - Cookie not fully valid')
+                print('   - API masking data')
+    else:
+        print(f'❌ API Error: {api_resp.status_code}')
+        print(f'Response: {api_resp.text[:500]}')
+        
+except Exception as e:
+    print(f'❌ Error: {e}')
+        "
+    
+    - name: Test 4 - Check GitHub IP
+      run: |
+        python -c "
+import requests
+
+print('='*60)
+print('TEST 4: GitHub Actions IP Information')
+print('='*60)
+
+try:
+    # GitHub Actions의 IP 확인
+    ip_resp = requests.get('https://api.ipify.org?format=json')
+    ip_data = ip_resp.json()
+    print(f'GitHub Actions IP: {ip_data[\"ip\"]}')
+    
+    # IP 정보 확인
+    info_resp = requests.get(f'http://ip-api.com/json/{ip_data[\"ip\"]}')
+    info = info_resp.json()
+    print(f'Location: {info.get(\"country\")}, {info.get(\"city\")}')
+    print(f'ISP: {info.get(\"isp\")}')
+    print(f'Organization: {info.get(\"org\")}')
+    
+    if 'GitHub' in info.get('org', '') or 'Microsoft' in info.get('org', ''):
+        print('⚠️ This IP is identifiable as GitHub/Microsoft datacenter')
+        print('   High chance of being blocked by anti-bot systems')
+        
+except Exception as e:
+    print(f'Error checking IP: {e}')
+        "
+    
+    - name: Summary
+      if: always()
+      run: |
+        echo "## 📊 Test Summary"
+        echo ""
+        echo "### Results:"
+        echo "1. Check if main page is accessible from GitHub Actions"
+        echo "2. Check if API works without authentication"
+        echo "3. Check if API works with cookie (if provided)"
+        echo "4. Check GitHub Actions IP information"
+        echo ""
+        echo "### Next Steps:"
+        echo "- If Test 1 fails with 403: GitHub IP is blocked"
+        echo "- If Test 3 succeeds: You can use GitHub Actions!"
+        echo "- If all fail: Need alternative solution (self-hosted runner)"
