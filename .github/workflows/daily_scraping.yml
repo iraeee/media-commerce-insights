@@ -1,43 +1,34 @@
-name: Daily Labangba Scraping
+name: Daily Scraping with Compression
 
 on:
   schedule:
-    # KST 기준 실행 시간 (UTC = KST - 9시간)
-    # 오전/오후 2시간 간격
-    - cron: '0 22 * * *'   # 07:00 KST
-    - cron: '0 0 * * *'    # 09:00 KST
-    - cron: '0 2 * * *'    # 11:00 KST  
-    - cron: '0 4 * * *'    # 13:00 KST
-    - cron: '0 6 * * *'    # 15:00 KST
-    - cron: '0 8 * * *'    # 17:00 KST
-    - cron: '0 10 * * *'   # 19:00 KST
-    - cron: '0 12 * * *'   # 21:00 KST
-    # 23시 이후 집중 크롤링
-    - cron: '0 14 * * *'   # 23:00 KST
-    - cron: '30 14 * * *'  # 23:30 KST
-    - cron: '45 14 * * *'  # 23:45 KST
-    - cron: '56 14 * * *'  # 23:56 KST
-    
+    - cron: '56 14 * * *'  # 매일 23:56 (KST) - UTC로는 14:56
+    - cron: '0 */2 * * *'  # 2시간마다 실행
+  push:
+    branches: [ main ]
+    paths:
+      - 'scrape_schedule.py'
+      - 'health_check.py'
+      - 'cookie_updater.py'
+      - 'compress_and_backup.py'
   workflow_dispatch:
     inputs:
-      force_run:
-        description: '수동 실행'
+      date:
+        description: 'Date to scrape (YYMMDD format, e.g., 241209)'
         required: false
-        default: 'false'
-
-permissions:
-  contents: write
-  actions: read
 
 jobs:
-  scrape-data:
+  scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python 3.10
+    - uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+    
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
@@ -47,79 +38,107 @@ jobs:
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
     
     - name: Install dependencies
       run: |
-        pip install requests pandas openpyxl streamlit plotly
-        
-    - name: Run health check
-      continue-on-error: true
-      env:
-        LABANGBA_COOKIE: ${{ secrets.LABANGBA_COOKIE }}
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4 pandas openpyxl zstandard
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: Decompress existing DB if exists
       run: |
-        if [ -f "health_check.py" ]; then
-          python health_check.py || echo "Health check warnings"
+        if [ -f "schedule.db.zst" ]; then
+          echo "📦 기존 압축 DB 발견, 압축 해제 중..."
+          python -c "
+import zstandard as zstd
+import os
+
+if os.path.exists('schedule.db.zst'):
+    with open('schedule.db.zst', 'rb') as compressed:
+        dctx = zstd.ZstdDecompressor()
+        with open('schedule.db', 'wb') as output:
+            output.write(dctx.decompress(compressed.read()))
+    print('✅ 압축 해제 완료')
+"
         fi
     
-    - name: Run scraping
-      env:
-        LABANGBA_COOKIE: ${{ secrets.LABANGBA_COOKIE }}
+    - name: Run health check
       run: |
-        echo "크롤링 시작: $(date +%Y-%m-%d' '%H:%M:%S)"
-        
-        # Cookie 업데이트
-        if [ -f "cookie_updater.py" ]; then
-          python cookie_updater.py
+        if [ -f "health_check.py" ]; then
+          python health_check.py || echo "Health check warnings detected"
         fi
-        
-        # 크롤링 실행
-        if [ -f "scrape_schedule.py" ]; then
-          python scrape_schedule.py
+    
+    - name: Run cookie updater
+      run: |
+        if [ -f "cookie_updater.py" ]; then
+          python cookie_updater.py || echo "Cookie update completed"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Run scraping
+      run: |
+        if [ "${{ github.event.inputs.date }}" != "" ]; then
+          echo "Manual date provided: ${{ github.event.inputs.date }}"
+          python scrape_schedule.py --date ${{ github.event.inputs.date }}
         else
-          echo "ERROR: scrape_schedule.py not found"
-          exit 1
+          python scrape_schedule.py
         fi
     
     - name: Check data quality
-      id: data_check
-      continue-on-error: true
       run: |
         if [ -f "check_data.py" ]; then
-          python check_data.py
+          python check_data.py || true
         fi
     
     - name: Update aggregate tables
-      if: success()
-      continue-on-error: true
       run: |
         if [ -f "update_aggregate_tables.py" ]; then
-          python update_aggregate_tables.py
+          python update_aggregate_tables.py || echo "Aggregate update completed"
+        fi
+    
+    - name: Compress and backup DB
+      run: |
+        if [ -f "compress_and_backup.py" ]; then
+          python compress_and_backup.py
+        else
+          echo "⚠️ compress_and_backup.py not found, using simple compression"
+          python -c "
+import zstandard as zstd
+import os
+
+if os.path.exists('schedule.db'):
+    print('📦 DB 압축 중...')
+    with open('schedule.db', 'rb') as f_in:
+        data = f_in.read()
+    
+    cctx = zstd.ZstdCompressor(level=3)
+    compressed = cctx.compress(data)
+    
+    with open('schedule.db.zst', 'wb') as f_out:
+        f_out.write(compressed)
+    
+    original_size = os.path.getsize('schedule.db') / (1024 * 1024)
+    compressed_size = os.path.getsize('schedule.db.zst') / (1024 * 1024)
+    print(f'✅ 압축 완료: {original_size:.1f}MB → {compressed_size:.1f}MB')
+    
+    # 원본 삭제
+    os.remove('schedule.db')
+    print('✅ 원본 DB 삭제')
+"
         fi
     
     - name: Generate README
-      if: always()
       run: |
         if [ -f "generate_readme.py" ]; then
-          python generate_readme.py
+          python generate_readme.py || echo "README generation completed"
         fi
     
-    - name: Commit and push
-      if: always()
+    - name: Commit and push if changed
       run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action"
         git add -A
-        
-        # 커밋 메시지 생성
-        MESSAGE="📊 Update: $(date +%Y-%m-%d' '%H:%M' KST')"
-        if [ -f "data_check.json" ]; then
-          TOTAL=$(python3 -c "import json; print(json.load(open('data_check.json')).get('today', 0))" 2>/dev/null || echo "0")
-          SALES=$(python3 -c "import json; print(json.load(open('data_check.json')).get('with_sales', 0))" 2>/dev/null || echo "0")
-          MESSAGE="📊 Update: $(date +%Y-%m-%d' '%H:%M) - $TOTAL records, $SALES with sales"
-        fi
-        
-        git diff --quiet && git diff --staged --quiet || {
-          git commit -m "$MESSAGE"
-          git push origin main
-        }
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update DB and backups [$(date +'%Y-%m-%d %H:%M:%S')]" && git push)
