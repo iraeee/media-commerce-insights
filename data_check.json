@@ -1,12 +1,12 @@
 {
   "date": "2025-09-29",
-  "time": "14:23:50",
+  "time": "15:05:37",
   "total": 523,
-  "zero_count": 109,
-  "zero_ratio": 20.84130019120459,
-  "avg_revenue": 51643040.707456976,
-  "max_revenue": 1076699000,
-  "status": "OK",
-  "message": "✅ 정상: 523개 레코드, 0원 109개",
-  "action": "NONE"
+  "zero_count": 523,
+  "zero_ratio": 100.0,
+  "avg_revenue": 0,
+  "max_revenue": 0,
+  "status": "CRITICAL",
+  "message": "🚨 모든 데이터가 0원 (523개) - 쿠키 만료",
+  "action": "UPDATE_COOKIE"
 }
