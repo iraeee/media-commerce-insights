@@ -58,18 +58,18 @@ jobs:
     - name: Decompress existing DB if exists
       run: |
         if [ -f "schedule.db.zst" ]; then
-          echo "📦 기존 압축 DB 발견, 압축 해제 중..."
+          echo "Decompressing existing DB..."
           python -c "
-import zstandard as zstd
-import os
-
-if os.path.exists('schedule.db.zst'):
-    with open('schedule.db.zst', 'rb') as compressed:
-        dctx = zstd.ZstdDecompressor()
-        with open('schedule.db', 'wb') as output:
-            output.write(dctx.decompress(compressed.read()))
-    print('✅ 압축 해제 완료')
-"
+        import zstandard as zstd
+        import os
+        
+        if os.path.exists('schedule.db.zst'):
+            with open('schedule.db.zst', 'rb') as compressed:
+                dctx = zstd.ZstdDecompressor()
+                with open('schedule.db', 'wb') as output:
+                    output.write(dctx.decompress(compressed.read()))
+            print('Decompression complete')
+        "
         fi
     
     - name: Run health check
@@ -112,30 +112,29 @@ if os.path.exists('schedule.db.zst'):
         if [ -f "compress_and_backup.py" ]; then
           python compress_and_backup.py
         else
-          echo "⚠️ compress_and_backup.py not found, using simple compression"
+          echo "Using simple compression..."
           python -c "
-import zstandard as zstd
-import os
-
-if os.path.exists('schedule.db'):
-    print('📦 DB 압축 중...')
-    with open('schedule.db', 'rb') as f_in:
-        data = f_in.read()
-    
-    cctx = zstd.ZstdCompressor(level=3)
-    compressed = cctx.compress(data)
-    
-    with open('schedule.db.zst', 'wb') as f_out:
-        f_out.write(compressed)
-    
-    original_size = os.path.getsize('schedule.db') / (1024 * 1024)
-    compressed_size = os.path.getsize('schedule.db.zst') / (1024 * 1024)
-    print(f'✅ 압축 완료: {original_size:.1f}MB → {compressed_size:.1f}MB')
-    
-    # 원본 삭제
-    os.remove('schedule.db')
-    print('✅ 원본 DB 삭제')
-"
+        import zstandard as zstd
+        import os
+        
+        if os.path.exists('schedule.db'):
+            print('Compressing DB...')
+            with open('schedule.db', 'rb') as f_in:
+                data = f_in.read()
+            
+            cctx = zstd.ZstdCompressor(level=3)
+            compressed = cctx.compress(data)
+            
+            with open('schedule.db.zst', 'wb') as f_out:
+                f_out.write(compressed)
+            
+            original_size = os.path.getsize('schedule.db') / (1024 * 1024)
+            compressed_size = os.path.getsize('schedule.db.zst') / (1024 * 1024)
+            print(f'Compressed: {original_size:.1f}MB to {compressed_size:.1f}MB')
+            
+            os.remove('schedule.db')
+            print('Original DB removed')
+        "
         fi
     
     - name: Generate README
