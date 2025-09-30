@@ -8,9 +8,9 @@ on:
     
     # 밤 11시대 집중 실행
     - cron: '30 14 * * *'  # KST 23:30
+    - cron: '40 14 * * *'  # KST 23:40
     - cron: '50 14 * * *'  # KST 23:50
     - cron: '56 14 * * *'  # KST 23:56
-    - cron: '59 14 * * *'  # KST 23:59 (자정 직전)
     
   push:
     branches: [ main ]
