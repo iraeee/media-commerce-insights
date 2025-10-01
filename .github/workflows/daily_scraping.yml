@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       date:
-        description: 'Date to scrape (YYMMDD format, e.g., 241209)'
+        description: 'Date to scrape (YYMMDD format, e.g., 241002)'
         required: false
 
 jobs:
