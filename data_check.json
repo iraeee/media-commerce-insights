@@ -1,12 +1,12 @@
 {
   "date": "2025-10-19",
-  "time": "02:31:07",
-  "total": 498,
-  "zero_count": 269,
-  "zero_ratio": 54.01606425702812,
-  "avg_revenue": 33592670.48192771,
-  "max_revenue": 1234376000,
+  "time": "03:40:25",
+  "total": 501,
+  "zero_count": 255,
+  "zero_ratio": 50.898203592814376,
+  "avg_revenue": 41625375.06986028,
+  "max_revenue": 1830331000,
   "status": "CAUTION",
-  "message": "⚠️ 0원 매출 다소 많음: 269개 (54.0%)",
+  "message": "⚠️ 0원 매출 다소 많음: 255개 (50.9%)",
   "action": "MONITOR"
 }
