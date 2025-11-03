@@ -1,12 +1,12 @@
 {
   "date": "2025-11-03",
-  "time": "12:20:41",
+  "time": "13:24:37",
   "total": 499,
-  "zero_count": 125,
-  "zero_ratio": 25.0501002004008,
-  "avg_revenue": 63143094.228456914,
+  "zero_count": 113,
+  "zero_ratio": 22.645290581162325,
+  "avg_revenue": 70339575.81162325,
   "max_revenue": 2556015000,
   "status": "OK",
-  "message": "✅ 정상: 499개 레코드, 0원 125개",
+  "message": "✅ 정상: 499개 레코드, 0원 113개",
   "action": "NONE"
 }
