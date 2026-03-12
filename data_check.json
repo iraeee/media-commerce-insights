@@ -1,12 +1,12 @@
 {
   "date": "2026-03-12",
-  "time": "00:02:13",
-  "total": 506,
-  "zero_count": 302,
-  "zero_ratio": 59.683794466403164,
-  "avg_revenue": 13805982.644268775,
-  "max_revenue": 467737000,
+  "time": "01:46:30",
+  "total": 511,
+  "zero_count": 279,
+  "zero_ratio": 54.59882583170255,
+  "avg_revenue": 22334351.698630136,
+  "max_revenue": 736490400,
   "status": "CAUTION",
-  "message": "⚠️ 0원 매출 다소 많음: 302개 (59.7%)",
+  "message": "⚠️ 0원 매출 다소 많음: 279개 (54.6%)",
   "action": "MONITOR"
 }
