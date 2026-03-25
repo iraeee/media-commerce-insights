@@ -79,32 +79,52 @@ def init_weather_table(db_path=DB_PATH):
 
 
 # ============================================================================
-# 날씨 분류
+# 날씨 분류 (8단계)
+# ☀️맑음 / ☁️흐림 / 🌦️이슬비 / 🌧️비 / ⛈️폭우 / 🌨️눈조금 / ❄️눈 / ⛄폭설
 # ============================================================================
 def classify_sky(iscs, sum_rn, dd_mes, avg_tca):
+    """ASOS 확정 데이터 → 8단계 분류"""
     iscs = iscs or ""
-    if "{눈}" in iscs or "눈날림" in iscs:
-        return "눈"
+    snowfall = 0
     if dd_mes and dd_mes.strip():
         try:
-            if float(dd_mes) > 0:
-                return "눈"
+            snowfall = float(dd_mes)
         except:
-            pass
-    if sum_rn > 0 or "{비}" in iscs:
+            snowfall = 0
+    
+    # 1) 눈 계열 (적설 기준)
+    if snowfall >= 10:
+        return "폭설"
+    if snowfall >= 3:
+        return "눈"
+    if snowfall > 0 or "{눈}" in iscs or "눈날림" in iscs:
+        return "눈조금"
+    
+    # 2) 비 계열 (강수량 기준)
+    if sum_rn >= 30:
+        return "폭우"
+    if sum_rn >= 1:
         return "비"
+    if sum_rn > 0 or "{비}" in iscs:
+        return "이슬비"
+    
+    # 3) 맑음/흐림 (운량 기준)
     if avg_tca <= 5:
         return "맑음"
     return "흐림"
 
 
 def classify_forecast(sky_code, pty_code=0):
-    """단기예보 코드 또는 중기예보 문자열로 날씨 분류"""
+    """단기/중기 예보 → 8단계 중 가능한 분류"""
     if isinstance(sky_code, str):
         s = sky_code
+        if '폭설' in s:
+            return '폭설'
         if '눈' in s:
             return '눈'
-        if '비' in s or '소나기' in s:
+        if '소나기' in s:
+            return '비'
+        if '비' in s:
             return '비'
         if '맑' in s:
             return '맑음'
