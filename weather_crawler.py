@@ -150,6 +150,38 @@ def classify_forecast(sky_code, pty_code=0):
     return '흐림'
 
 
+def _has_precip(sky_text):
+    """비/눈 여부 판단"""
+    if not sky_text:
+        return False, None
+    s = sky_text
+    if '눈' in s:
+        return True, '눈'
+    if '비' in s or '소나기' in s:
+        return True, '비'
+    return False, None
+
+
+def _classify_ampm(sky_am, sky_pm):
+    """오전/오후 예보를 비/눈 시간대 구분하여 분류
+    반환: '오전비', '오후비', '비', '오전눈', '오후눈', '눈', '맑음', '흐림' 등
+    """
+    am_precip, am_type = _has_precip(sky_am)
+    pm_precip, pm_type = _has_precip(sky_pm)
+    
+    if am_precip and pm_precip:
+        # 둘 다 강수 → 눈+비 혼합이면 비 우선
+        ptype = am_type if am_type == pm_type else '비'
+        return ptype  # '비' 또는 '눈' (종일)
+    elif am_precip:
+        return f'오전{am_type}'  # '오전비' 또는 '오전눈'
+    elif pm_precip:
+        return f'오후{pm_type}'  # '오후비' 또는 '오후눈'
+    else:
+        # 강수 없음 → PM 기준 (흐림/구름많음/맑음)
+        return classify_forecast(sky_pm or sky_am or '맑음')
+
+
 # ============================================================================
 # 1. ASOS 과거 데이터
 # ============================================================================
@@ -363,7 +395,10 @@ def fetch_mid_forecast():
                 for d in range(3, 11):
                     dt = (base_date + timedelta(days=d)).strftime('%Y-%m-%d')
                     if d <= 7:
-                        sky_str = item.get(f'wf{d}Pm', '') or item.get(f'wf{d}Am', '')
+                        # AM/PM 둘 다 확인하여 비/눈 시간대 구분
+                        sky_am = item.get(f'wf{d}Am', '')
+                        sky_pm = item.get(f'wf{d}Pm', '')
+                        sky_str = _classify_ampm(sky_am, sky_pm)
                     else:
                         sky_str = item.get(f'wf{d}', '')
                     if sky_str:
@@ -374,10 +409,16 @@ def fetch_mid_forecast():
         print(f"⚠️ 중기육상 실패: {e}")
 
     for dt in ta_data:
+        sky_val = land_data.get(dt, '맑음')
+        # AM/PM 구분된 값은 이미 분류됨 (오전비, 오후비 등), 그 외는 classify
+        if sky_val.startswith('오전') or sky_val.startswith('오후') or sky_val in ('맑음','흐림','비','눈','폭우','폭설','이슬비','눈조금'):
+            sky_final = sky_val
+        else:
+            sky_final = classify_forecast(sky_val)
         result[dt] = {
             'max_temp': ta_data[dt]['max_temp'],
             'min_temp': ta_data[dt]['min_temp'],
-            'sky': classify_forecast(land_data.get(dt, '맑음')),
+            'sky': sky_final,
         }
     if result:
         print(f"📡 중기예보: {len(result)}일 ({min(result.keys())}~{max(result.keys())})")
