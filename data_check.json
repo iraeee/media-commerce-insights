@@ -1,12 +1,12 @@
 {
-  "date": "2026-05-22",
-  "time": "16:59:13",
-  "total": 500,
-  "zero_count": 66,
-  "zero_ratio": 13.200000000000001,
-  "avg_revenue": 72944016.44,
-  "max_revenue": 1408040800,
-  "status": "OK",
-  "message": "✅ 정상: 500개 레코드, 0원 66개",
-  "action": "NONE"
+  "date": "2026-05-23",
+  "time": "01:05:49",
+  "total": 442,
+  "zero_count": 249,
+  "zero_ratio": 56.334841628959275,
+  "avg_revenue": 33492122.714932125,
+  "max_revenue": 3036952000,
+  "status": "CAUTION",
+  "message": "⚠️ 0원 매출 다소 많음: 249개 (56.3%)",
+  "action": "MONITOR"
 }
