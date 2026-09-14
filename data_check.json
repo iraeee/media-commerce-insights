@@ -1,12 +1,12 @@
 {
   "date": "2026-09-14",
-  "time": "03:51:46",
-  "total": 119,
-  "zero_count": 119,
-  "zero_ratio": 100.0,
-  "avg_revenue": 0,
-  "max_revenue": 0,
-  "status": "CRITICAL",
-  "message": "🚨 모든 데이터가 0원 (119개) - 쿠키 만료",
-  "action": "UPDATE_COOKIE"
+  "time": "03:54:49",
+  "total": 498,
+  "zero_count": 249,
+  "zero_ratio": 50.0,
+  "avg_revenue": 24624763.072289158,
+  "max_revenue": 823824600,
+  "status": "CAUTION",
+  "message": "⚠️ 0원 매출 다소 많음: 249개 (50.0%)",
+  "action": "MONITOR"
 }
